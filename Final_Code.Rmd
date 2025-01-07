@@ -1,0 +1,522 @@
+```{r}
+library(tidyverse)
+
+# Load the dataset
+data <- read.csv("rentfaster-1.csv")
+
+# Clean data: Remove rows with missing values
+
+data_clean <- data %>%
+  filter(!is.na(price), !is.na(beds), !is.na(baths), !is.na(sq_feet), !is.na(furnishing), !is.na(type), !is.na(city), !is.na(province))
+
+summary(data_clean$beds)
+# Convert columns to numeric (where applicable)
+# Replace "Studio" with "0"
+data_clean$beds <- gsub("Studio", "0", data_clean$beds, ignore.case = TRUE)
+
+# Replace "N beds" or "N bed" with just the number (up to 20)
+data_clean$beds <- gsub("([0-9]+) bed[s]?", "\\1", data_clean$beds, ignore.case = TRUE)
+
+# Convert the cleaned data to numeric
+data_clean$beds <- as.numeric(data_clean$beds)
+
+# Check the results
+print(data_clean$beds)
+
+# Find the maximum value
+max_value <- max(data_clean$beds, na.rm = TRUE)
+print(max_value)
+
+
+summary(data_clean$beds)
+data_clean$price <- as.numeric(gsub("[$,]", "", data_clean$price))
+data_clean$baths <- as.numeric(gsub(" Baths", "", data_clean$baths))
+data_clean$sq_feet <- as.numeric(gsub("[^0-9]", "", data_clean$sq_feet))
+
+# Convert categorical variables to factors
+data_clean$furnishing <- as.factor(data_clean$furnishing)
+data_clean$type <- as.factor(data_clean$type)
+data_clean$city <- as.factor(data_clean$city)
+data_clean$province <- as.factor(data_clean$province)
+
+# Filter for Ontario data
+data_ontario <- data_clean %>% filter(province == "Ontario")
+
+# Remove rows where sq_feet is NA
+data_ontario_clean <- data_ontario %>% filter(!is.na(sq_feet))
+
+
+# Alternatively, filter out problematic rows
+data_ontario_clean1 <- data_ontario_clean %>% filter(sq_feet > 10)
+
+data_ontario_clean1 <- data_ontario_clean1 %>% filter(price > 0)
+
+summary(data_ontario_clean1$beds)
+
+```
+
+
+
+```{r}
+# Apply transformations based on Box-Cox results
+# Add a small constant if there are zero or negative prices
+
+# Fit the transformed model
+
+summary(data_ontario_clean1$sq_feet)
+
+model <- lm(price ~ beds + baths + sq_feet + latitude + type + furnishing, data = data_ontario_clean1)
+
+# Summary of the model
+summary(model)
+
+```
+
+
+```{r}
+
+#Residual Analysis
+# Residuals vs Fitted
+plot(fitted(model), resid(model), 
+     main = "Residuals vs Fitted", 
+     xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Extract the data used in the model
+model_data <- model.frame(model)
+residuals <- resid(model)
+
+# Residuals vs Beds (Transformed)
+plot(model_data$beds, residuals, 
+     main = "Residuals vs Beds", 
+     xlab = "Beds", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Baths
+plot(model_data$baths, residuals, 
+     main = "Residuals vs Baths", 
+     xlab = "Baths", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Square Feet (Transformed)
+plot(model_data$sq_feet, residuals, 
+     main = "Residuals vs Square Feet", 
+     xlab = "Square Feet", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+summary(data_ontario_clean1$sq_feet)
+summary(data_ontario_clean1$price)
+summary(model_data$sq_feet)
+
+# Residuals vs Latitude
+plot(model_data$latitude, residuals, 
+     main = "Residuals vs Latitude", 
+     xlab = "Latitude", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(residuals ~ model_data$type, 
+        main = "Residuals vs Type", 
+        xlab = "Type", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(residuals ~ model_data$furnishing, 
+        main = "Residuals vs Furnishing", 
+        xlab = "Furnishing", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Normal QQ Plot
+qqnorm(resid(model), main = "QQ Plot of Residuals")
+qqline(resid(model), col = "red")
+
+# Response vs Fitted
+# Extract the model data frame
+model_data <- model.frame(model)
+
+# Response vs Fitted
+plot(fitted(model), model_data$price, 
+     main = "Response vs Fitted", 
+     xlab = "Fitted Values", ylab = "Price")
+abline(a = 0, b = 1, col = "red", lty = 2)  # Add a diagonal reference line
+
+# Pairwise scatterplots for predictors
+pairs(data_ontario_clean1[, c("beds", "baths", "sq_feet", "latitude", "type", "furnishing")], 
+      main = "Pairwise Scatterplots of Predictors")
+
+```
+
+
+```{r echo=TRUE}
+
+#Box-Cox
+library(MASS)
+
+model <- lm(price ~ beds + baths + sq_feet + latitude + type + furnishing , data = data_ontario_clean1)
+boxcox(model)
+```
+
+```{r}
+#Run only once
+# Add a small constant to make all values positive
+
+data_ontario_clean1$beds <- data_ontario_clean1$beds + 1
+data_ontario_clean1$baths <- data_ontario_clean1$baths + 1
+
+summary(data_ontario_clean1$baths)
+library(car)
+# Use Yeo-Johnson transformation for variables that may contain zero or negative values
+
+# Check for missing or non-finite values
+sapply(data_ontario_clean1[, c("price", "beds", "baths", "sq_feet", "latitude", "furnishing")], function(x) {
+  sum(is.na(x) | !is.finite(x))
+})
+
+hist(data_ontario_clean1$baths, main = "Distribution of Baths", xlab = "Number of Baths")
+summary(data_ontario_clean1$baths)
+
+hist(data_ontario_clean1$beds, main = "Distribution of Beds", xlab = "Number of Beds")
+summary(data_ontario_clean1$beds)
+
+```
+
+```{r}
+model <- lm(price ~ beds + baths + sq_feet + latitude + type + furnishing , data = data_ontario_clean1)
+boxcox(model)
+
+p <- powerTransform(cbind(data_ontario_clean1$price,
+                          data_ontario_clean1$sq_feet,
+                          data_ontario_clean1$latitude),
+                    family = "yjPower")
+
+
+summary(p)
+
+```
+
+```{r}
+lprice <- log(data_ontario_clean1$price)
+lsqft <- log(data_ontario_clean1$sq_feet)
+tlat <- (data_ontario_clean1$latitude)^(-5.5)
+
+tmodel <- lm(lprice ~ beds + baths + lsqft + tlat + type + furnishing, data = data_ontario_clean1)
+
+summary(tmodel)
+
+
+```
+
+```{r}
+#Residual Analysis
+# Residuals vs Fitted
+plot(fitted(tmodel), resid(tmodel), 
+     main = "tResiduals vs tFitted", 
+     xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Extract the data used in the model
+tmodel_data <- model.frame(tmodel)
+tresiduals <- resid(tmodel)
+
+# Residuals vs Beds (Transformed)
+plot(tmodel_data$beds, tresiduals, 
+     main = "tResiduals vs Beds", 
+     xlab = "Beds", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Baths
+plot(tmodel_data$baths, tresiduals, 
+     main = "tResiduals vs Baths", 
+     xlab = "Baths", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Square Feet (Transformed)
+plot(tmodel_data$lsqft, tresiduals, 
+     main = "tResiduals vs log Square Feet", 
+     xlab = "Square Feet", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Latitude
+plot(tmodel_data$tlat, tresiduals, 
+     main = "tResiduals vs tLatitude", 
+     xlab = "Latitude", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(tresiduals ~ tmodel_data$type, 
+        main = "tResiduals vs Type", 
+        xlab = "Type", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(tresiduals ~ tmodel_data$furnishing, 
+        main = "tResiduals vs Furnishing", 
+        xlab = "Furnishing", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Normal QQ Plot
+qqnorm(resid(tmodel), main = "QQ Plot of Residuals")
+qqline(resid(tmodel), col = "red")
+
+# Response vs Fitted
+plot(fitted(tmodel), tmodel_data$lprice, 
+     main = "tResponse vs Fitted", 
+     xlab = "Fitted Values", ylab = "Price")
+abline(a = 0, b = 1, col = "red", lty = 2)  # Add a diagonal reference line
+
+# Pairwise scatterplots for predictors
+#mutate data 
+tdata <- data_ontario_clean1 %>% mutate(sq_feet = log(sq_feet))
+tdata <- tdata %>% mutate(price = log(price))
+tdata <- tdata %>% mutate(latitude = (latitude)^(-5.5))
+pairs(tdata[, c("beds", "baths", "sq_feet", "latitude", "type", "furnishing")], 
+      main = "Pairwise Scatterplots of Predictors")
+```
+
+
+
+```{r}
+
+#All Possible Subset Method + Deriving AIC/BIC/R^2
+library(leaps)
+all_subsets <- regsubsets(lprice ~ beds + baths + lsqft + tlat + type + furnishing, 
+                          data = data_ontario_clean1, nbest = 1, nvmax = 6)
+summary(all_subsets)
+
+# View summary of the best models
+best_summary <- summary(all_subsets)
+
+# Print the summary
+print(best_summary)
+
+# Plot Adjusted R^2 for each subset size
+subsets(all_subsets, statistic = "adjr2", legend = FALSE, main = "Adjusted R^2 for Best Models")
+
+summary(data_ontario_clean1$baths)
+
+```
+
+```{r}
+model1 <- lm(lprice ~ baths, data = data_ontario_clean1)
+model2 <- lm(lprice ~ lsqft + baths, data = data_ontario_clean1)
+model3 <- lm(lprice ~ lsqft + type + baths, data = data_ontario_clean1)
+model4 <- lm(lprice ~ lsqft + type + baths + beds, data = data_ontario_clean1)
+model5 <- lm(lprice ~ lsqft + type + furnishing + baths + beds, data = data_ontario_clean1)
+model6 <- lm(lprice ~ lsqft + type + tlat + furnishing + baths + beds, data = data_ontario_clean1)
+model1_summary <- summary(model1)
+model2_summary <- summary(model2)
+model3_summary <- summary(model3)
+model4_summary <- summary(model4)
+model5_summary <- summary(model5)
+model6_summary <- summary(model6)
+
+# Extract Adjusted R²
+adjusted_r2_1 <- model1_summary$adj.r.squared
+print(adjusted_r2_1)
+
+adjusted_r2_2 <- model2_summary$adj.r.squared
+print(adjusted_r2_2)
+
+adjusted_r2_3 <- model3_summary$adj.r.squared
+print(adjusted_r2_3)
+
+adjusted_r2_4 <- model4_summary$adj.r.squared
+print(adjusted_r2_4)
+
+adjusted_r2_5 <- model5_summary$adj.r.squared
+print(adjusted_r2_5)
+
+adjusted_r2_6 <- model6_summary$adj.r.squared
+print(adjusted_r2_6)
+#AIC values
+aic_1 <- AIC(model1)
+aic_2 <- AIC(model2)
+aic_3 <- AIC(model3)
+aic_4 <- AIC(model4)
+aic_5 <- AIC(model5)
+aic_6 <- AIC(model6)
+
+print(aic_1)
+print(aic_2)
+print(aic_3)
+print(aic_4)
+print(aic_5)
+print(aic_6)
+
+#BIC values 
+bic_1 <- BIC(model1)
+bic_2 <- BIC(model2)
+bic_3 <- BIC(model3)
+bic_4 <- BIC(model4)
+bic_5 <- BIC(model5)
+bic_6 <- BIC(model6)
+
+print(bic_1)
+print(bic_2)
+print(bic_3)
+print(bic_4)
+print(bic_5)
+print(bic_6)
+
+```
+```{r}
+#Final Model 
+
+fmodel <- lm(lprice ~ lsqft + baths + beds + type + furnishing, data = data_ontario_clean1)
+summary(fmodel)
+
+reducedmodel1 <- lm(lprice ~ lsqft + baths + beds + furnishing, data = data_ontario_clean1)
+
+reducedmodel2 <- lm(lprice ~ lsqft + baths + beds + type, data = data_ontario_clean1)
+
+reducedmodel3 <- lm(lprice ~ lsqft + baths + beds, data = data_ontario_clean1)
+
+anova(reducedmodel1,fmodel)
+
+anova(reducedmodel2,fmodel)
+
+anova(reducedmodel3,fmodel)
+
+
+```
+
+```{r}
+#Residual Analysis
+# Residuals vs Fitted
+plot(fitted(fmodel), resid(fmodel), 
+     main = "fResiduals vs fFitted", 
+     xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Extract the data used in the model
+fmodel_data <- model.frame(fmodel)
+fresiduals <- resid(fmodel)
+
+# Residuals vs Baths
+plot(fmodel_data$baths, fresiduals, 
+     main = "fResiduals vs Baths", 
+     xlab = "Baths", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Square Feet (Transformed)
+plot(fmodel_data$lsqft, fresiduals, 
+     main = "fResiduals vs log Square Feet", 
+     xlab = "Square Feet", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+
+# Residuals vs Beds
+plot(fmodel_data$beds, fresiduals, 
+     main = "fResiduals vs beds", 
+     xlab = "beds", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(fresiduals ~ fmodel_data$type, 
+        main = "fResiduals vs Type", 
+        xlab = "Type", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(fresiduals ~ fmodel_data$furnishing, 
+        main = "fResiduals vs Furnishing", 
+        xlab = "Furnishing", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Normal QQ Plot
+qqnorm(resid(fmodel), main = "QQ Plot of Residuals")
+qqline(resid(fmodel), col = "red")
+
+# Response vs Fitted
+plot(fitted(fmodel), fmodel_data$lprice, 
+     main = "fResponse vs Fitted", 
+     xlab = "Fitted Values", ylab = "Price")
+abline(a = 0, b = 1, col = "red", lty = 2)  # Add a diagonal reference line
+
+# Pairwise scatterplots for predictors
+#mutate data 
+fdata <- data_ontario_clean1 %>% mutate(sq_feet = log(sq_feet))
+fdata <- fdata %>% mutate(price = log(price))
+
+pairs(fdata[, c("baths", "sq_feet","beds", "type", "furnishing")], 
+      main = "Pairwise Scatterplots of Predictors")
+```
+
+```{r}
+vif(fmodel)
+```
+
+```{r}
+#Secondary boxcox on final model
+
+library(MASS)
+
+model <- lm(lprice ~ baths + lsqft + beds + type + furnishing , data = data_ontario_clean1)
+boxcox(model)
+
+
+```
+
+```{r echo=TRUE}
+#final model edits for assumptions 
+l2price <- log(lprice)
+fmodel2 <- lm(l2price ~ lsqft + baths + beds + type + furnishing, data = data_ontario_clean1)
+
+
+summary(fmodel2)
+```
+
+```{r echo=TRUE}
+#Residual Analysis
+# Residuals vs Fitted
+plot(fitted(fmodel2), resid(fmodel2), 
+     main = "fResiduals vs fFitted", 
+     xlab = "Fitted Values", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Extract the data used in the model
+fmodel2_data <- model.frame(fmodel2)
+f2residuals <- resid(fmodel2)
+
+# Residuals vs Baths
+plot(fmodel2_data$baths, f2residuals, 
+     main = "f2Residuals vs Baths", 
+     xlab = "Baths", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Square Feet (Transformed)
+plot(fmodel2_data$lsqft, f2residuals, 
+     main = "f2Residuals vs log Square Feet", 
+     xlab = "Square Feet", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(f2residuals ~ fmodel2_data$type, 
+        main = "f2Residuals vs Type", 
+        xlab = "Type", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Residuals vs Type (Categorical)
+boxplot(f2residuals ~ fmodel2_data$furnishing, 
+        main = "f2Residuals vs Furnishing", 
+        xlab = "Furnishing", ylab = "Residuals")
+abline(h = 0, col = "red", lty = 2)
+
+# Normal QQ Plot
+qqnorm(resid(fmodel2), main = "QQ Plot of Residuals")
+qqline(resid(fmodel2), col = "red")
+
+# Response vs Fitted
+plot(fitted(fmodel2), fmodel2_data$l2price, 
+     main = "f2Response vs Fitted", 
+     xlab = "Fitted Values", ylab = "lPrice")
+abline(a = 0, b = 1, col = "red", lty = 2)  # Add a diagonal reference line
+
+# Pairwise scatterplots for predictors
+#mutate data 
+fdata2 <- data_ontario_clean1 %>% mutate(sq_feet = log(sq_feet))
+fdata2 <- fdata2 %>% mutate(price = l2price)
+
+pairs(fdata2[, c("baths", "sq_feet", "latitude", "type", "furnishing")], 
+      main = "Pairwise Scatterplots of Predictors")
+```
+
