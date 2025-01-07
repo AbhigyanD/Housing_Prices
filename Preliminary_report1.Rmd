@@ -1,6 +1,6 @@
 ---
 title: "STA302 Project Preliminary Report: Ontario Rent Analysis with Linear Regression"
-author: Dai Matsuzaka, Abhigyan Dey, Uma Sadhwani.
+author: Abhigyan Dey, Dai Matsuzaka, Uma Sadhwani.
 date: "October 8, 2024"
 output:
   pdf_document:
