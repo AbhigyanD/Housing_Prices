@@ -1,0 +1,412 @@
+---
+title: "STA302 Project Preliminary Report: Ontario Rent Analysis with Linear Regression"
+author: Dai Matsuzaka, Abhigyan Dey, Uma Sadhwani.
+date: "October 8, 2024"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Introduction**
+
+In this analysis, we aim to explore rental prices in Ontario based on various predictors, such as the number of bedrooms, bathrooms, square footage, latitude, and property type. We will fit a linear regression model using these variables and assess the assumptions of the model through diagnostic plots.
+
+## **Load and Clean the Data:**
+
+Data Cleaning and Preparation The initial step involves loading and preparing the dataset for analysis. The raw data is cleaned by:
+
+Removing rows with missing values to ensure accurate modeling. Converting columns such as "beds," "price," "baths," and "sq_feet" into appropriate numeric formats for further analysis. Transforming "Studio" apartments into "0" bedrooms and handling other string patterns to make the data more consistent. Filtering out irrelevant provinces, focusing only on Ontario. Ensuring categorical variables such as "furnishing," "type," "city," and "province" are treated as factors. The resulting clean dataset, named data_ontario_clean, is ready for modeling.
+
+```{r LOADER.1, echo=TRUE}
+library(tidyverse)
+
+# Load the dataset
+data <- read.csv("rentfaster.csv")
+
+# Clean data: Remove rows with missing values and unwanted characters
+data_clean <- data %>% 
+  filter(!is.na(price), !is.na(beds), !is.na(baths), !is.na(sq_feet), !is.na(furnishing), !is.na(type), !is.na(city), !is.na(province))
+
+# Convert columns to numeric (where applicable)
+data_clean$beds <- gsub("Studio", "0.0", data_clean$beds)
+data_clean$beds <- gsub("1 Bed", "1.0", data_clean$beds)
+```
+
+```{r clean_beds, include=FALSE}
+data_clean$beds <- as.numeric(gsub(" Beds", "", data_clean$beds))
+data_clean$price <- as.numeric(gsub("[$,]", "", data_clean$price))
+data_clean$baths <- as.numeric(gsub(" Baths", "", data_clean$baths))
+data_clean$province <- as.factor(data_clean$province)
+data_clean$sq_feet <- as.numeric(gsub("[^0-9]", "", data_clean$sq_feet))
+```
+
+```{r categ, echo=TRUE}
+# Convert categorical variables to factors
+data_clean$furnishing <- as.factor(data_clean$furnishing)
+data_clean$type <- as.factor(data_clean$type)
+data_clean$city <- as.factor(data_clean$city)
+data_clean$province <- as.factor(data_clean$province)
+
+
+#filtering out the data for Ontario
+data_ontario <- data_clean %>% filter(province == "Ontario")
+
+# Now you can continue working with the Ontario data; Uncomment if u need to see:
+#summary(data_ontario)
+
+# Remove rows where sq_feet is NA
+data_ontario_clean <- data_ontario %>% filter(!is.na(sq_feet))
+
+# Check the result
+summary(data_ontario_clean)
+
+
+# Summarize the cleaned data
+# summary(data_clean)
+```
+
+## **Purpose of Developing the Model**
+
+The goal is to create a model to help identify the key factors influencing rental prices in Ontario. Understanding these relationships can be instrumental for:
+
+-   **Renters**: Assisting renters in identifying properties that provide the best value for money.
+
+-   **Property Managers**: Helping managers adjust their rental prices based on the attributes of their properties.
+
+-   **Policymakers**: Offering insights into market trends that could influence housing policy.
+
+This analysis also serves as an educational example for exploring using linear regression for property data.
+
+## **Exploratory Data Analysis (EDA)**
+
+### **Summarizing the Dataset**
+
+The EDA starts with a brief summary of the number of bedrooms and a comparison of data before and after removing rows with missing square footage values. This helps ensure the integrity of the dataset before modeling.
+
+### **Visualizing the Data**
+
+Histograms are plotted for the key variables (Price, Beds, Baths, Square Feet, and Latitude) to get a sense of the distribution and identify potential outliers or unusual patterns.
+
+**Summarize and Visualize the Data:**
+
+Here, we provide a table and class details for the number of beds and check the cleaned dataset's dimensions. We also display histograms for a quick overview of the data distribution
+
+```{r TABLE COMPARE, echo=TRUE}
+
+####Table for checking the values with 
+
+table(data_ontario$beds)
+class(data_ontario$beds)
+sum(table(data_ontario$beds))
+nrow(data_ontario)
+
+table(data_ontario_clean$beds)
+class(data_ontario_clean$beds)
+sum(table(data_ontario_clean$beds))
+nrow(data_ontario_clean)
+```
+
+**Histograms for Summary**
+
+```{r Histograms, echo=TRUE}
+# Set up 2x2 layout for multiple histograms
+par(mfrow = c(2, 3))  # Adjusted to fit all 5 histograms (2 rows, 3 columns)
+
+# Histogram of Price with Mean and Median
+hist(data_ontario_clean$price, 
+     main = "Histogram of Price", 
+     xlab = "Price", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate and add mean and median lines for Price
+mean_price <- mean(data_ontario_clean$price, na.rm = TRUE)
+median_price <- median(data_ontario_clean$price, na.rm = TRUE)
+abline(v = mean_price, col = "red", lwd = 2, lty = 2)  # Mean line
+abline(v = median_price, col = "blue", lwd = 2, lty = 3)  # Median line
+legend("topright", legend = c("Mean", "Median"), col = c("red", "blue"), lty = c(2, 3), lwd = 2)
+
+# Histogram of Beds with Mean and Median
+hist(data_ontario_clean$beds, 
+     main = "Histogram of Beds", 
+     xlab = "Number of Beds", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate and add mean and median lines for Beds
+mean_beds <- mean(data_ontario_clean$beds, na.rm = TRUE)
+median_beds <- median(data_ontario_clean$beds, na.rm = TRUE)
+abline(v = mean_beds, col = "red", lwd = 2, lty = 2)  # Mean line
+abline(v = median_beds, col = "blue", lwd = 2, lty = 3)  # Median line
+legend("topright", legend = c("Mean", "Median"), col = c("red", "blue"), lty = c(2, 3), lwd = 2)
+
+# Histogram of Baths with Mean and Median
+hist(data_ontario_clean$baths, 
+     main = "Histogram of Baths", 
+     xlab = "Number of Baths", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate and add mean and median lines for Baths
+mean_baths <- mean(data_ontario_clean$baths, na.rm = TRUE)
+median_baths <- median(data_ontario_clean$baths, na.rm = TRUE)
+abline(v = mean_baths, col = "red", lwd = 2, lty = 2)  # Mean line
+abline(v = median_baths, col = "blue", lwd = 2, lty = 3)  # Median line
+legend("topright", legend = c("Mean", "Median"), col = c("red", "blue"), lty = c(2, 3), lwd = 2)
+
+# Histogram of Square Feet with Mean and Median
+hist(data_ontario_clean$sq_feet, 
+     main = "Histogram of Square Feet", 
+     xlab = "Square Feet", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate and add mean and median lines for Square Feet
+mean_sq_feet <- mean(data_ontario_clean$sq_feet, na.rm = TRUE)
+median_sq_feet <- median(data_ontario_clean$sq_feet, na.rm = TRUE)
+abline(v = mean_sq_feet, col = "red", lwd = 2, lty = 2)  # Mean line
+abline(v = median_sq_feet, col = "blue", lwd = 2, lty = 3)  # Median line
+legend("topright", legend = c("Mean", "Median"), col = c("red", "blue"), lty = c(2, 3), lwd = 2)
+
+# Histogram of Latitude with Mean and Median
+hist(data_ontario_clean$latitude, 
+     main = "Histogram of Latitude", 
+     xlab = "Latitude", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate and add mean and median lines for Latitude
+mean_latitude <- mean(data_ontario_clean$latitude, na.rm = TRUE)
+median_latitude <- median(data_ontario_clean$latitude, na.rm = TRUE)
+abline(v = mean_latitude, col = "red", lwd = 2, lty = 2)  # Mean line
+abline(v = median_latitude, col = "blue", lwd = 2, lty = 3)  # Median line
+legend("topright", legend = c("Mean", "Median"), col = c("red", "blue"), lty = c(2, 3), lwd = 2)
+
+```
+
+These histograms show that most properties have 2 to 4 bedrooms and 2 to 3 bathrooms. The distribution of square footage is slightly right-skewed, indicating that while most properties have moderate space, there are some larger, luxury properties.
+
+#### Justification for Relevance:
+
+Each predictor variable is directly relevant to the research question, as previous literature and intuition suggest that the number of bedrooms, bathrooms, and square footage are key factors that influence rental prices. For instance:
+
+-   More bedrooms and bathrooms typically increase rental prices due to the added utility for renters.
+
+-   Larger square footage is associated with higher rent prices, as it offers more living space.
+
+-   Furnishing status is also important, as furnished properties generally command higher rent due to the convenience provided to renters.
+
+The choice of predictors is backed by empirical evidence from previous studies on real estate and housing markets, and these variables have been appropriately processed for inclusion in the linear regression model (e.g., categorical variables are encoded as factors).
+
+## **Create a summary table for numerical variables**
+
+```{r Numerical Summ, echo=TRUE}
+# Create a summary table for numerical variables
+summary_table <- data_ontario_clean %>%
+  summarize(
+    mean_price = mean(price, na.rm = TRUE),
+    median_price = median(price, na.rm = TRUE),
+    sd_price = sd(price, na.rm = TRUE),
+    mean_beds = mean(beds, na.rm = TRUE),
+    median_beds = median(beds, na.rm = TRUE),
+    sd_beds = sd(beds, na.rm = TRUE),
+    mean_baths = mean(baths, na.rm = TRUE),
+    median_baths = median(baths, na.rm = TRUE),
+    sd_baths = sd(baths, na.rm = TRUE),
+    mean_sq_feet = mean(sq_feet, na.rm = TRUE),
+    median_sq_feet = median(sq_feet, na.rm = TRUE),
+    sd_sq_feet = sd(sq_feet, na.rm = TRUE)
+  )
+
+summary_table
+
+```
+
+### **Fit the Linear Model with Latitude and Type. First, we fit the linear model using beds, baths, sq_feet, latitude, and type as predictors:**
+
+The linear regression model is built using the formula:
+
+$$
+\text{Price} = \beta_0 + \beta_1(\text{Beds}) + \beta_2(\text{Baths}) + \beta_3(\text{Square Feet}) + \beta_4(\text{Latitude}) + \beta_5(\text{Type})
+$$
+
+where:
+
+-   `Price` is the response variable.
+-   `Beds`, `Baths`, `Square Feet`, `Latitude`, and `Type` are predictor variables.
+
+```{r Linear_Model, echo=TRUE}
+# Fit the linear model
+model_type <- lm(price ~ beds + baths + sq_feet + latitude + type, data = data_ontario_clean)
+
+# Extract residuals and fitted values for further analysis
+y_value <- resid(model_type)
+x_value <- fitted(model_type)
+
+```
+
+### **Residuals vs Fitted Plot:**
+
+```{r Residual vs Fitted, echo=TRUE}
+# Residuals vs Fitted plot
+plot(x = x_value, y = y_value, main="Residual vs Fitted", 
+     xlab="Fitted", ylab="Residuals")
+```
+
+### **Residuals vs Predictors: We are using them for our Numerical(Quantitative) Predictors**
+
+```{r Residuals vs Predictor, echo=TRUE}
+
+# Residuals vs beds
+plot(x = data_ontario_clean$beds, y = y_value, main="Residual vs Beds",
+     xlab="Beds", ylab="Residual")
+
+# Residuals vs baths
+plot(x = data_ontario_clean$baths, y = y_value, main="Residual vs Baths",
+     xlab="Baths", ylab="Residual")
+
+# Residuals vs sq_feet
+plot(x = data_ontario_clean$sq_feet, y = y_value, main="Residual vs Square Feet",
+     xlab="Square Feet", ylab="Residual")
+
+# Residuals vs latitude
+plot(x = data_ontario_clean$latitude, y = y_value, main="Residual vs Latitude",
+     xlab="Latitude", ylab="Residual")
+
+```
+
+### **Boxplots of Residuals vs Categorical Variables For the categorical variables type and furnishing, we can use boxplots to compare residuals.**
+
+```{r Boxplot_categorical, echo=TRUE}
+# Boxplot: Residuals vs Type
+boxplot(y_value ~ data_ontario_clean$type, main="Residual vs Type",
+        xlab="Type", ylab="Residuals")
+
+# Boxplot: Residuals vs Furnishing
+boxplot(y_value ~ data_ontario_clean$furnishing, main="Residual vs Furnishing",
+        xlab="Furnishing", ylab="Residuals")
+```
+
+### **Step 5: Normal QQ Plot for Residuals Finally, here’s the normal QQ plot to check the normality of the residuals:**
+
+```{r QQ_Plot, echo = TRUE}
+# Normal QQ plot
+qqnorm(y_value, main="QQ Plot of Residuals")
+qqline(y_value, col = "red")
+```
+
+### **Response vs Fitted Plot: Here’s the code to create a similar Response vs Fitted plot for your linear model:**
+
+```{r Response_vs_Fitted, echo=TRUE}
+# Replace NULL with the appropriate values for price and fitted values
+y_value2 <- data_ontario_clean$price  # Actual price values (response)
+x_value2 <- fitted(model_type)  # Fitted values from the model
+
+# Plot Response (Price) vs Fitted values
+plot(x = x_value2, y = y_value2, main = "Response vs Fitted (Price)",
+     xlab = "Fitted", ylab = "Price")
+
+# Add a diagonal reference line (y = x) to help assess fit
+abline(a = 0, b = 1, lty = 2, col = "red")
+```
+
+## **Numerical Summary of Rent Prices in Ontario**
+
+To better understand the distribution of rental prices in Ontario, we calculate key summary statistics including the mean, median, minimum, maximum, and standard deviation.
+
+```{r Rent_Numerical_Summary, echo=TRUE}
+# Calculating the numerical summary of the rent price
+
+# Mean rent price
+mean_rent <- mean(data_ontario_clean$price)
+
+# Median rent price
+median_rent <- median(data_ontario_clean$price)
+
+# Minimum rent price
+min_rent <- min(data_ontario_clean$price)
+
+# Maximum rent price
+max_rent <- max(data_ontario_clean$price)
+
+# Standard deviation of rent price
+sd_rent <- sd(data_ontario_clean$price)
+
+# Display the summary statistics
+mean_rent
+median_rent
+min_rent
+max_rent
+sd_rent
+```
+
+This summary indicates that the rent prices are spread over a wide range, with the majority clustering around the mean and median values, but with a few higher-priced outliers. The standard deviation suggests a moderate variability in rent prices, reflecting the diversity of rental properties in terms of size, location, and amenities.
+
+## **Histogram of Rent Prices with Mean and Median Lines**
+
+```{r Histogram_with_Mean_Median, echo=TRUE}
+# Draw the histogram of rent prices
+hist(data_ontario_clean$price, 
+     main = "Histogram of Rent Prices", 
+     xlab = "Rent Price", 
+     col = "lightblue", 
+     border = "black")
+
+# Calculate mean and median
+mean_rent <- mean(data_ontario_clean$price, na.rm = TRUE)
+median_rent <- median(data_ontario_clean$price, na.rm = TRUE)
+
+# Add a vertical line for the mean
+abline(v = mean_rent, col = "red", lwd = 2, lty = 2)  # Red dashed line for mean
+
+# Add a vertical line for the median
+abline(v = median_rent, col = "blue", lwd = 2, lty = 3)  # Blue dotted line for median
+
+# Adding a legend to identify the lines
+legend("topright", 
+       legend = c("Mean", "Median"), 
+       col = c("red", "blue"), 
+       lty = c(2, 3), 
+       lwd = 2)
+```
+
+```{r model_type}
+
+file <- data_ontario_clean
+class(file)
+plotRows <- file[,c("latitude", "beds", "baths", "sq_feet", "type")]
+#print(plotRows)
+pairs(plotRows)
+```
+
+## **Visualizing Relationships**
+
+The use of `pairs()` generates a **scatter plot matrix** of the selected variables (`latitude`, `beds`, `baths`, `sq_feet`, and `type`). This is particularly useful for:
+
+-   **Visualizing pairwise relationships** between predictors.
+-   **Detecting trends or correlations** between the variables, which helps determine whether relationships between predictors may affect the linear regression model.
+-   **Identifying outliers or unusual patterns**: Outliers in the scatter plots may indicate influential data points that could affect the regression results.
+
+## **Relevance to Model Assumptions**
+
+-   **Multicollinearity**: By plotting pairwise relationships, you can visually inspect potential multicollinearity among predictors. For instance, if two variables are highly correlated, they may affect the interpretability of the model.
+-   **Linearity**: The scatter plots allow for a quick visual check of whether the relationships between the predictors and response variable (in this case, rent price) are approximately linear. Linear regression assumes that these relationships are linear, and deviations from linearity could signal the need for transformations.
+
+## **Choice of Predictors**
+
+-   **Latitude**: This variable provides geographic information that could relate to rent prices, as properties in different regions of Ontario may have different average rents.
+-   **Beds, Baths, Sq_feet**: These are key predictors in housing models and are expected to influence rent prices. Visualizing their relationships can help confirm whether these assumptions hold.
+-   **Type**: This categorical variable (e.g., apartment, condo, etc.) is visualized using scatter plots to understand its interactions with other variables. Although scatter plots don’t work well for categorical variables in terms of direct correlation, they can still reveal patterns in the grouping of values.
+
+## **Interpretation**
+
+After generating the scatter plot matrix:
+
+-   **Strong linear relationships** between numerical predictors (like `beds` and `sq_feet`) suggest they may be highly predictive of the response variable (rent price).
+-   If the plots show **non-linear relationships** or unusual distributions (like heavy clustering), this may indicate a need to transform certain variables or consider interactions between them in the model.
+-   The plots involving **`type`** may show **clustering** of rent prices or property characteristics based on the property type (e.g., apartments may have lower square footage but still command higher rents in certain areas).
